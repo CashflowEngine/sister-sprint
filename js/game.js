@@ -943,6 +943,7 @@ function updateRemote(dt) {
 // ---------------------------------------------------------------------------
 // Zeichnen
 // ---------------------------------------------------------------------------
+let lastHudB = 0;
 const cv = $('game');
 const ctx = cv.getContext('2d');
 let dpr = 1, scale = 1, VW = 800, VH = ROWS * T, SH = 480, offY = 0;
@@ -1310,13 +1311,18 @@ function drawRider(x, y, o) {
   ctx.restore();
 
   if (o.name) {
-    ctx.font = 'bold 11px system-ui, sans-serif';
+    // Gut lesbares Namensschild: weiße Schrift auf dunklem Grund, Farbstreifen in Spielerfarbe
+    ctx.font = 'bold 13px system-ui, sans-serif';
     ctx.textAlign = 'center';
-    const w = ctx.measureText(o.name).width + 10;
-    ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    ctx.fillRect(x + PW / 2 - w / 2, y - 30, w, 15);
+    ctx.textBaseline = 'alphabetic';
+    const w = ctx.measureText(o.name).width + 14;
+    const bx = x + PW / 2 - w / 2, by = y - 33;
+    ctx.fillStyle = 'rgba(20,10,40,0.78)';
+    if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(bx, by, w, 18, 6); ctx.fill(); } else ctx.fillRect(bx, by, w, 18);
     ctx.fillStyle = c.shirt;
-    ctx.fillText(o.name, x + PW / 2, y - 19);
+    ctx.fillRect(bx + 4, by + 15, w - 8, 3);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(o.name, x + PW / 2, by + 13);
   }
 }
 
@@ -1537,6 +1543,8 @@ function drawHud() {
   const list = Object.values(G.players).sort((a, b) => a.color - b.color);
   const lw = small ? 150 : 200;
   panel(W - lw - 10, 10, lw, 12 + list.length * 20);
+  const hudB = Math.round(10 + 12 + list.length * 20 + 8);
+  if (hudB !== lastHudB) { lastHudB = hudB; document.documentElement.style.setProperty('--hud-bottom', hudB + 'px'); }
   ctx.font = `${small ? 11 : 13}px system-ui, sans-serif`;
   list.forEach((p, i) => {
     const y = 22 + i * 20;
@@ -1720,6 +1728,7 @@ function setupMenu() {
   $('btnSolo').onclick = startSolo;
   $('btnInvite').onclick = () => { if (G.mode === 'play' && G.code !== 'SOLO') showLobby(); };
   $('btnMute').onclick = () => { initAudio(); setMuted(!muted); };
+  $('btnRotateOk').onclick = () => { document.body.classList.add('rotate-ok'); };
   setMuted(muted);
   show('menu');
 }
