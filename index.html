@@ -6,7 +6,9 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="theme-color" content="#2b1a4a">
-  <title>Sister Sprint</title>
+  <title>Basti’s Reitstall</title>
+  <meta name="apple-mobile-web-app-title" content="Basti’s Reitstall">
+  <meta name="application-name" content="Basti’s Reitstall">
   <meta name="description" content="Das Reiter-Jump'n'Run für bis zu 5 Freunde – direkt im Browser, ohne Anmeldung.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐴</text></svg>">
   <link rel="stylesheet" href="css/style.css">
@@ -19,13 +21,13 @@
   <div id="overlay">
     <div class="card" id="menu">
       <div class="logo">🐴</div>
-      <h1>Sister Sprint</h1>
+      <h1>Basti’s Reitstall</h1>
       <p class="sub">Das Reiter-Jump'n'Run für bis zu 5 Freunde</p>
       <label class="field">Dein Name
         <input id="name" maxlength="12" autocomplete="off">
       </label>
       <div id="joinBox" hidden>
-        <p>Du wurdest zum Spiel <b id="joinCode"></b> eingeladen.</p>
+        <p>Du wurdest in <b>Basti’s Reitstall</b> eingeladen (Spiel <b id="joinCode"></b>).</p>
         <button id="btnJoin" class="big">Mitspielen</button>
       </div>
       <button id="btnHost" class="big">Neues Spiel starten</button>
@@ -46,7 +48,7 @@
 
     <div class="card" id="lobby" hidden>
       <h2>Warteraum <span id="pcount" class="pill"></span></h2>
-      <p>Schick diesen Link an deine Freunde. Wer ihn öffnet, spielt mit:</p>
+      <p>Schick diesen Link an deine Freunde. Wer ihn öffnet, reitet in <b>Basti’s Reitstall</b> mit:</p>
       <div class="link">
         <input id="shareLink" readonly>
         <button id="btnCopy">Kopieren</button>
@@ -79,6 +81,15 @@
     <div class="pad pad-right">
       <div class="tbtn small" data-k="fire">Wurf</div>
       <div class="tbtn jump" data-k="jump">⤒</div>
+    </div>
+  </div>
+
+  <div id="rotate" role="dialog" aria-live="polite">
+    <div class="rotate-card">
+      <div class="rotate-icon">📱</div>
+      <p class="rotate-title">Bitte Handy quer drehen 🐴</p>
+      <p class="rotate-sub">Quer hast du viel mehr Platz zum Reiten!</p>
+      <button id="btnRotateOk" class="secondary">Trotzdem hochkant spielen</button>
     </div>
   </div>
 

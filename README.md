@@ -1,4 +1,4 @@
-# Sister Sprint 🐴
+# Basti’s Reitstall 🐴
 
 Ein Koop-Jump'n'Run zu Pferd für bis zu **5 Spieler** – direkt im Browser, auf iPad, Mac oder PC, **ohne Anmeldung**.
 Die Spielmechanik ist an klassische 80er-Jump'n'Runs wie *The Great Giana Sisters* angelehnt; Grafik, Musik, Level und Name sind eigen.
@@ -31,6 +31,13 @@ Herz (Extraleben), Diamantenbeutel (+10).
   verwaltet die gemeinsame Welt (Gegner, Blöcke, Diamanten, Punkte); jeder steuert sein eigenes Pferd.
 - Grenzen: Der Gastgeber muss das Spiel offen und im Vordergrund lassen. In sehr strengen Firmen-/Schul-Netzen kann
   WebRTC blockiert sein (dann bräuchte es einen TURN-Server).
+
+## Mehrspieler-Verbindung (TURN)
+
+Damit Mitspielen auch über Mobilfunk oder strenge WLANs klappt, holt das Spiel beim Start kurzlebige
+TURN-Zugangsdaten von `/api/turn` (Vercel-Funktion, Cloudflare Realtime TURN). Die Schlüssel liegen nur als
+Vercel-Umgebungsvariablen `TURN_KEY_ID` und `TURN_KEY_API_TOKEN` vor, nie im Code. Klappt `/api/turn` nicht,
+spielt man mit den öffentlichen STUN-Servern weiter.
 
 ## Lokal starten
 

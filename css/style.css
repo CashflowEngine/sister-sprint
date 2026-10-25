@@ -164,3 +164,44 @@ body.touch.playing #overlay:not([hidden]) ~ #touch { display: none; }
   z-index: 6;
 }
 .topbtns button { background: rgba(20, 10, 40, 0.6); font-size: 16px; }
+
+/* Auf Touch-Geräten: Einladen/Ton oben rechts, damit sie nie die Steuerknöpfe verdecken */
+body.touch .topbtns {
+  left: auto;
+  bottom: auto;
+  transform: none;
+  right: calc(10px + env(safe-area-inset-right));
+  top: calc(var(--hud-bottom, 72px) + env(safe-area-inset-top));
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+body.touch .topbtns button { font-size: 14px; min-height: 36px; padding: 6px 10px; }
+
+/* Hinweis: Handy quer drehen (nur Touch, hochkant, im Spiel) */
+#rotate {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: rgba(20, 10, 40, 0.82);
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  touch-action: auto;
+}
+@media (orientation: portrait) {
+  body.touch.playing:not(.rotate-ok) #rotate { display: flex; }
+}
+.rotate-card {
+  background: #fffaf2;
+  border-radius: 20px;
+  padding: 24px;
+  max-width: 340px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+}
+.rotate-icon { font-size: 54px; line-height: 1; animation: ss-rot 1.8s ease-in-out infinite; display: inline-block; }
+@keyframes ss-rot { 0%, 30% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
+.rotate-title { font-size: 22px; font-weight: 800; margin: 14px 0 6px; }
+.rotate-sub { color: #5b5070; margin: 0 0 16px; }

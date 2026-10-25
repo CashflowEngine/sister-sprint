@@ -2,11 +2,36 @@
 // verbinden sich direkt mit ihm. Es gibt keinen eigenen Spiel-Server.
 
 const PREFIX = 'sistersprint-v1-';
-const ICE = [
+const STUN = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
   { urls: 'stun:global.stun.twilio.com:3478' },
 ];
+
+// Holt kurzlebige TURN-Zugangsdaten von /api/turn (Vercel-Funktion). Damit klappt
+// Mitspielen auch über Mobilfunk oder strenge WLANs. Schlägt das fehl, bleibt es bei STUN.
+let icePromise = null;
+export function getIceServers() {
+  if (!icePromise) {
+    icePromise = (async () => {
+      try {
+        const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        const t = setTimeout(() => ctl && ctl.abort(), 4000);
+        const r = await fetch('/api/turn', { cache: 'no-store', signal: ctl && ctl.signal });
+        clearTimeout(t);
+        if (!r.ok) throw new Error('turn ' + r.status);
+        const d = await r.json();
+        const turn = Array.isArray(d.iceServers) ? d.iceServers : (d.iceServers ? [d.iceServers] : []);
+        if (!turn.length) throw new Error('turn leer');
+        return [...STUN, ...turn];
+      } catch (_) {
+        icePromise = null; // beim nächsten Versuch nochmal probieren
+        return STUN;
+      }
+    })();
+  }
+  return icePromise;
+}
 
 export const MAX_PLAYERS = 5;
 
@@ -25,10 +50,11 @@ export class Net {
     this.host = null; // nur Mitspieler: Verbindung zum Gastgeber
   }
 
-  hostGame(code) {
+  async hostGame(code) {
+    const ice = await getIceServers();
     return new Promise((resolve, reject) => {
       if (typeof Peer === 'undefined') return reject(new Error('Netzwerk-Bibliothek konnte nicht geladen werden.'));
-      const peer = new Peer(PREFIX + code, { debug: 1, config: { iceServers: ICE } });
+      const peer = new Peer(PREFIX + code, { debug: 1, config: { iceServers: ice } });
       this.peer = peer;
       const timer = setTimeout(() => reject(new Error('Keine Verbindung zum Vermittlungs-Server.')), 15000);
       peer.on('open', () => { clearTimeout(timer); resolve(code); });
@@ -50,10 +76,11 @@ export class Net {
     });
   }
 
-  joinGame(code) {
+  async joinGame(code) {
+    const ice = await getIceServers();
     return new Promise((resolve, reject) => {
       if (typeof Peer === 'undefined') return reject(new Error('Netzwerk-Bibliothek konnte nicht geladen werden.'));
-      const peer = new Peer({ debug: 1, config: { iceServers: ICE } });
+      const peer = new Peer({ debug: 1, config: { iceServers: ice } });
       this.peer = peer;
       let done = false;
       const timer = setTimeout(() => { if (!done) reject(new Error('Zeitüberschreitung – das Spiel antwortet nicht.')); }, 15000);
