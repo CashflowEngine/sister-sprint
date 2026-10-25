@@ -1,4 +1,4 @@
-import { TILE, ROWS, SOLID, buildLevel, themeFor } from './levels.js';
+import { TILE, ROWS, SOLID, buildLevel, themeFor, easeFor } from './levels.js';
 import { Net, randomCode, MAX_PLAYERS } from './net.js';
 
 // ---------------------------------------------------------------------------
@@ -9,7 +9,7 @@ const GRAV = 1900, JUMP_V = 790, MAX_FALL = 900;
 const RUN = 270, ACC = 1600, AIR_ACC = 1100, FRICT = 2000;
 const PW = 40, PH = 52;
 const LEVEL_TIME = 250;
-const START_LIVES = 3;
+const START_LIVES = 5;
 const STEP = 1 / 60;
 
 const COLORS = [
@@ -231,8 +231,13 @@ function setupTouch() {
 // ---------------------------------------------------------------------------
 // Level laden und Spielerposition
 // ---------------------------------------------------------------------------
+// Mehr Zeit in den ersten Leveln: Level 1 +100 s, Level 2 +50 s
+const levelTime = n => LEVEL_TIME + Math.round(100 * easeFor(n));
+
 function makeEnemy(e) {
-  const speed = { k: 60, i: 40, f: 0, w: 0 }[e.type];
+  // Gegner sind in Level 1 nur halb so schnell, in Level 2 etwas langsamer
+  const slow = 1 - 0.5 * easeFor(G.level);
+  const speed = { k: 60, i: 40, f: 0, w: 0 }[e.type] * slow;
   return { ...e, w: 28, h: e.type === 'w' ? 24 : 28, vx: -speed, vy: 0, alive: true, face: -1, ox: e.x, oy: e.y, t: Math.random() * 3, tx: e.x, ty: e.y, pending: 0, onGround: false, hitWall: false, hop: 1.2 };
 }
 
@@ -248,7 +253,7 @@ function loadLevel(n, spawnX) {
   G.shoes = [];
   G.enemies = G.map.enemies.map(makeEnemy);
   G.tileLog = [];
-  G.time = LEVEL_TIME;
+  G.time = levelTime(G.level);
   G.countdown = 0;
   G.frozenUntil = 0;
   me.finished = false;
@@ -457,6 +462,14 @@ function die(fell) {
   me.star = 0;
   me.deathX = me.x;
   const info = myInfo();
+  if (fell && easeFor(G.level) >= 1) {
+    // Level 1: Reinfallen kostet kein Leben, man startet einfach kurz davor neu
+    me.livesLeft = info ? info.lives : 1;
+    me.deathT = 1.0;
+    sfx('hurt');
+    toast('Hoppla! Kein Problem – gleich nochmal.');
+    return;
+  }
   me.livesLeft = (info ? info.lives : 1) - 1;
   sfx('die');
   sendEv({ k: 'dead' });
@@ -529,6 +542,8 @@ function setTile(tx, ty, v) {
 
 function rollItem() {
   const r = Math.random();
+  const ease = easeFor(G.level);
+  if (ease > 0 && r < 0.3 * ease) return r < 0.15 * ease ? 'heart' : 'star';
   if (r < 0.55) return 'power';
   if (r < 0.67) return 'star';
   if (r < 0.77) return 'clock';
@@ -633,7 +648,7 @@ function hostUpdate(dt) {
     if (G.countdown <= 0) nextLevel();
   } else {
     G.time -= dt;
-    if (G.time <= 0) { G.time = LEVEL_TIME; change({ k: 'timeup' }); }
+    if (G.time <= 0) { G.time = levelTime(G.level); change({ k: 'timeup' }); }
   }
 
   const all = Object.values(G.players);
@@ -678,7 +693,7 @@ function simEnemy(e, dt, xs) {
     e.vx = 0;
     e.hop -= dt;
     if (e.hop <= 0) {
-      e.hop = 1.3 + Math.random();
+      e.hop = 1.3 + Math.random() + 1.5 * easeFor(G.level);
       let tx = xs[0];
       for (const x of xs) if (Math.abs(x - e.x) < Math.abs(tx - e.x)) tx = x;
       e.face = tx < e.x ? -1 : 1;
