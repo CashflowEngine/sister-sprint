@@ -284,11 +284,35 @@ export function themeFor(level) {
   return THEMES[(level - 1) % THEMES.length];
 }
 
+// Sanfter Einstieg: Level 1 und 2 sind deutlich leichter, ab Level 3 gilt alles wie gehabt.
+// ease = 1 (Level 1), 0.5 (Level 2), 0 (ab Level 3)
+export function easeFor(level) {
+  return level <= 1 ? 1 : level === 2 ? 0.5 : 0;
+}
+
+const hasWater = c => c.rows.some(r => r.includes('~'));
+
+// Macht einen Baustein für die ersten Level freundlicher (immer gleich, damit alle Spieler dasselbe Level sehen)
+function soften(rows, ease, nearStart) {
+  return rows.map((r, i) => {
+    let s = r;
+    if (ease >= 1) {
+      s = s.replace(/\^/g, '.');                      // keine Stacheln
+      s = s.replace(/[iw]/g, '.');                     // kein Igel, keine Wespe
+      if (i >= 8) s = s.replace(/#\.\.\.#/g, '##..#');  // Gruben nur 2 statt 3 Felder breit
+    }
+    if (ease > 0 && nearStart) s = s.replace(/[kiwf]/g, '.'); // keine Gegner direkt nach dem Start
+    return s;
+  });
+}
+
 export function buildLevel(level) {
   const rand = rng(level * 9973 + 17);
+  const ease = easeFor(level);
   const maxD = Math.min(3, Math.floor((level + 1) / 2));
-  const pool = CHUNKS.filter(c => c.d <= maxD);
-  const count = 6 + Math.min(level, 10);
+  // Level 1: nur die leichtesten Bausteine; Level 2: ohne Wasser-Gruben
+  const pool = CHUNKS.filter(c => (ease >= 1 ? c.d === 0 : c.d <= maxD) && !(ease > 0 && hasWater(c)));
+  const count = ease >= 1 ? 6 : ease > 0 ? 7 : 6 + Math.min(level, 10);
   const parts = [START];
   let last = -1;
   for (let i = 0; i < count; i++) {
@@ -300,7 +324,7 @@ export function buildLevel(level) {
       idx = level > 2 && pool[alt].d > pool[pick].d ? alt : pick;
     } while (idx === last && pool.length > 1);
     last = idx;
-    parts.push(pool[idx].rows);
+    parts.push(ease > 0 ? soften(pool[idx].rows, ease, i < 2) : pool[idx].rows);
   }
   parts.push(END);
 

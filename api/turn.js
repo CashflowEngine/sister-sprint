@@ -7,7 +7,8 @@ export async function GET() {
   const token = process.env.TURN_KEY_API_TOKEN;
   const headers = { 'content-type': 'application/json', 'cache-control': 'no-store' };
   if (!keyId || !token) {
-    return new Response(JSON.stringify({ error: 'turn not configured' }), { status: 503, headers });
+    // Ohne TURN-Schlüssel: leise antworten (200, leere Liste) -> Spiel nutzt nur STUN, kein roter Konsolenfehler
+    return new Response(JSON.stringify({ iceServers: [], turn: false }), { status: 200, headers });
   }
   try {
     const r = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${encodeURIComponent(keyId)}/credentials/generate-ice-servers`, {
