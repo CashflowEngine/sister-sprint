@@ -23,6 +23,7 @@ export const THEMES = [
 // ?  Bonusblock    P  Zauberblock    ^  Stacheln        ~  Wasser / Lava
 // o  Diamant       k  Käfer          i  Igel (nicht draufspringen!)
 // w  Wespe         f  Frosch         S  Start          F  Ziel-Flagge
+// h  Hufeisen zum Einsammeln (gibt Wurf-Munition, jeder Spieler hat seine eigenen)
 // Jeder Baustein hat 10 Zeilen (das sind die unteren 10 Zeilen des Levels).
 const START = [
   '................',
@@ -32,7 +33,7 @@ const START = [
   '................',
   '................',
   '.....o.o.o......',
-  '..S.............',
+  '..S.......h.....',
   '################',
   '################',
 ];
@@ -59,7 +60,7 @@ const CHUNKS = [
     '....?B?B?.......',
     '................',
     '.......o.o......',
-    '................',
+    '............h...',
     '################',
     '################',
   ] },
@@ -71,7 +72,7 @@ const CHUNKS = [
     '................',
     '.....ooo........',
     '................',
-    '..........k.....',
+    '..h.......k.....',
     '######...#######',
     '######...#######',
   ] },
@@ -119,7 +120,7 @@ const CHUNKS = [
     '.....?...?......',
     '................',
     '................',
-    '......^^^.......',
+    '..h...^^^.......',
     '################',
     '################',
   ] },
@@ -155,7 +156,7 @@ const CHUNKS = [
     '......P.........',
     '................',
     '................',
-    '...........f....',
+    '...h.......f....',
     '################',
     '################',
   ] },
@@ -167,7 +168,7 @@ const CHUNKS = [
     '................',
     '................',
     '..=.............',
-    '..=....k........',
+    '..=....k....h...',
     '################',
     '################',
   ] },
@@ -203,7 +204,7 @@ const CHUNKS = [
     '...?.....?......',
     '................',
     '................',
-    '...k...i...k..f.',
+    '.h.k...i...k..f.',
     '################',
     '################',
   ] },
@@ -227,7 +228,7 @@ const CHUNKS = [
     '................',
     '..........===...',
     '................',
-    '.........f......',
+    '..h......f......',
     '#####...####....',
     '#####...####....',
   ] },
@@ -251,7 +252,7 @@ const CHUNKS = [
     '....?......P....',
     '................',
     '................',
-    '.....i....i.....',
+    '..h..i....i.....',
     '##^^##########^^',
     '################',
   ] },
@@ -332,7 +333,7 @@ export function buildLevel(level) {
   const t = [];
   for (let r = 0; r < ROWS; r++) t.push(new Array(width).fill('.'));
 
-  const map = { w: width, t, gems: [], enemies: [], chunkStarts: [], spawn: { x: 64, y: 0 }, flagX: 0, level };
+  const map = { w: width, t, gems: [], shoes: [], enemies: [], chunkStarts: [], spawn: { x: 64, y: 0 }, flagX: 0, level };
   let ox = 0;
   for (const rows of parts) {
     map.chunkStarts.push(ox);
@@ -343,6 +344,7 @@ export function buildLevel(level) {
         const x = ox + c, y = r + (ROWS - rows.length);
         if ('#=BP?^~'.includes(ch)) t[y][x] = ch;
         else if (ch === 'o') map.gems.push({ i: map.gems.length, x: x * TILE + 6, y: y * TILE + 6 });
+        else if (ch === 'h') map.shoes.push({ i: map.shoes.length, x: x * TILE + 2, y: y * TILE + 2 });
         else if ('kiwf'.includes(ch)) map.enemies.push({ id: map.enemies.length, type: ch, x: x * TILE + 2, y: y * TILE + 4 });
         else if (ch === 'S') map.spawn = { x: x * TILE, y: y * TILE - 30 };
         else if (ch === 'F') map.flagX = x * TILE;
