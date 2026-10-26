@@ -11,6 +11,10 @@ const PW = 40, PH = 52;
 const LEVEL_TIME = 250;
 const START_LIVES = 5;
 const STEP = 1 / 60;
+// Hufeisen-Wurf: eingesammelte Hufeisen sind die Munition
+const SHOE_PICKUP = 3;  // so viele gibt ein Hufeisen zum Einsammeln
+const STAR_SHOES = 5;   // so viele gibt ein Zauberstern zusätzlich
+const MAX_SHOES = 15;
 
 const COLORS = [
   { name: 'Rot', shirt: '#e5484d', helmet: '#a3191e', horse: '#8b4a2b', mane: '#2b1a10', hair: '#f2c94c' },
@@ -47,6 +51,12 @@ const G = {
   map: null,
   theme: null,
   gemsTaken: new Set(),
+  shoesTaken: new Set(), // eingesammelte Hufeisen (nur für mich, jeder hat seine eigenen)
+  tut: {},               // welche Lern-Hinweise schon gezeigt wurden
+  everGotShoe: false,
+  hint: null,
+  noAmmoT: 0,
+  ammoFlash: 0,
   gemOwner: new Map(), // nur Gastgeber
   items: new Map(),
   enemies: [],
@@ -69,6 +79,7 @@ const me = {
   x: 0, y: 0, w: PW, h: PH, vx: 0, vy: 0, face: 1, onGround: false, hitWall: false,
   coyote: 0, jumpBuf: 0, alive: true, deathT: 0, deathX: 0, livesLeft: 3,
   power: 0, star: 0, inv: 0, finished: false, out: false, color: 0, anim: 0,
+  ammo: 0, // Hufeisen zum Werfen
 };
 
 // ---------------------------------------------------------------------------
@@ -246,6 +257,10 @@ function loadLevel(n, spawnX) {
   G.map = buildLevel(n);
   G.theme = themeFor(n);
   G.gemsTaken.clear();
+  G.shoesTaken.clear();
+  // Lern-Hinweise gibt es in Level 1; der "So wirfst du"-Hinweis kommt sonst beim allerersten Hufeisen
+  G.tut = { near: n !== 1, enemy: n !== 1, got: n !== 1 && G.everGotShoe };
+  G.hint = null;
   G.gemOwner.clear();
   G.items.clear();
   G.bumps.clear();
@@ -393,6 +408,24 @@ function updateMe(dt) {
     }
   }
 
+  // Hufeisen einsammeln (nur lokal: jede Spielerin hat ihre eigenen)
+  for (const h of G.map.shoes) {
+    if (G.shoesTaken.has(h.i)) continue;
+    if (overlap(me, { x: h.x, y: h.y, w: 28, h: 28 })) {
+      G.shoesTaken.add(h.i);
+      addAmmo(SHOE_PICKUP);
+      sfx('item');
+      sparkle(h.x + 14, h.y + 14, '#ffd23f', 10);
+      G.particles.push({ type: 'text', text: `+${SHOE_PICKUP}`, x: h.x + 14, y: h.y, vx: 0, vy: -60, life: 0.9, max: 0.9 });
+      if (!G.tut.got) {
+        G.tut.got = true;
+        hint('Super! Drück X oder den Wurf-Knopf, um Hufeisen auf Gegner zu werfen.');
+      }
+      G.everGotShoe = true;
+    }
+  }
+  tutorial();
+
   // Gegenstände
   for (const it of G.items.values()) {
     if (it.pending && now() - it.pending < 1) continue;
@@ -429,11 +462,59 @@ function updateMe(dt) {
   if (me.inv > 0) me.inv -= dt;
   if (me.star > 0) { me.star -= dt; if (Math.random() < 0.4) sparkle(me.x + Math.random() * PW, me.y + Math.random() * PH, `hsl(${Math.random() * 360},90%,65%)`, 1); }
 
-  if (keys.firePressed) {
-    if (me.power >= 2 && G.shoes.length < 2) {
-      G.shoes.push({ x: me.x + PW / 2 + me.face * 18 - 7, y: me.y + 18, w: 14, h: 14, vx: me.face * 440, vy: -120, t: 1.6 });
-      sfx('shoot');
-    } else if (me.power < 2) sfx('neigh');
+  if (keys.firePressed) throwShoe();
+}
+
+function addAmmo(n) {
+  me.ammo = Math.min(MAX_SHOES, me.ammo + n);
+  G.ammoFlash = 0.6;
+}
+
+// Früher ging der Wurf nur mit der Zauberkraft des 2. Zaubersterns (me.power >= 2) –
+// in Level 1 bekam man die praktisch nie, und jeder Treffer nahm sie wieder weg.
+// Jetzt gilt: jedes eingesammelte Hufeisen ist ein Wurf.
+function throwShoe() {
+  if (!me.alive || me.finished || me.out) return;
+  if (me.ammo <= 0) {
+    sfx('neigh');
+    if (now() - G.noAmmoT > 2.5) {
+      G.noAmmoT = now();
+      toast('Keine Hufeisen mehr! Sammle goldene Hufeisen ein.');
+    }
+    return;
+  }
+  if (G.shoes.length >= 3) return;
+  me.ammo--;
+  G.shoes.push({
+    x: me.x + PW / 2 + me.face * 12 - 9, y: me.y + 12, w: 18, h: 18,
+    vx: me.face * 470 + me.vx * 0.3, vy: -170, t: 1.8,
+  });
+  sfx('shoot');
+}
+
+function hint(text) {
+  G.hint = { text, t: 6 };
+  sfx('item');
+}
+
+// Lern-Hinweise in Level 1: Hufeisen in der Nähe, erster Gegner in Sicht
+function tutorial() {
+  const tut = G.tut;
+  if (!tut.near) {
+    const first = G.map.shoes[0];
+    if (first && !G.shoesTaken.has(first.i) && Math.abs(me.x - first.x) < 280) {
+      tut.near = true;
+      hint('Hufeisen einsammeln! Reite zum goldenen Hufeisen.');
+    }
+  }
+  if (!tut.enemy) {
+    const e = G.enemies.find(e => e.alive && e.x > G.cam + 20 && e.x < G.cam + VW - 40);
+    if (e) {
+      tut.enemy = true;
+      hint(me.ammo > 0
+        ? 'Achtung, ein Gegner! Wirf ein Hufeisen: X oder Wurf-Knopf.'
+        : 'Achtung, ein Gegner! Spring ihm auf den Kopf.');
+    }
   }
 }
 
@@ -493,7 +574,8 @@ function updateShoes(dt) {
     s.vx = vx;
     for (const e of G.enemies) {
       if (!e.alive || (e.pending && now() - e.pending < 1)) continue;
-      if (overlap(s, e)) {
+      // Etwas großzügiger treffen (Gegner werden größer gezeichnet als ihr Körper)
+      if (overlap(s, e, -6)) {
         e.pending = now(); s.t = 0;
         sendEv({ k: 'kill', id: e.id, how: 'shoe' });
         sfx('stomp');
@@ -513,10 +595,12 @@ function myState() {
 
 function applyPower(type) {
   if (type === 'power') {
-    if (me.power < 2) {
-      me.power++;
-      toast(me.power === 1 ? '🔥 Feuer-Mähne! Spring von unten gegen Ziegel, um sie zu zerschlagen.' : '🧲 Hufeisen-Wurf! Mit X (oder dem Wurf-Knopf) werfen.');
-    } else toast('Zauberstern: +100 Punkte');
+    // Zauberstern: Feuer-Mähne (falls noch nicht da) und immer ein Bündel Hufeisen
+    addAmmo(STAR_SHOES);
+    if (me.power < 1) {
+      me.power = 1;
+      toast(`🔥 Feuer-Mähne und ${STAR_SHOES} Hufeisen! Zerschlag Ziegel von unten.`);
+    } else toast(`⭐ Zauberstern: ${STAR_SHOES} Hufeisen zum Werfen!`);
     sfx('power');
   } else if (type === 'star') {
     me.star = 10; sfx('power'); toast('🌈 ' + ITEM_TEXT.star);
@@ -941,6 +1025,8 @@ function updateParticles(dt) {
   G.particles = G.particles.filter(p => p.life > 0);
   for (const t of G.toasts) t.t -= dt;
   G.toasts = G.toasts.filter(t => t.t > 0);
+  if (G.hint && (G.hint.t -= dt) <= 0) G.hint = null;
+  if (G.ammoFlash > 0) G.ammoFlash -= dt;
   if (G.flash > 0) G.flash -= dt;
 }
 
@@ -1341,85 +1427,203 @@ function drawRider(x, y, o) {
   }
 }
 
-function drawEnemy(e) {
-  const t = now() + e.id;
-  const frozen = now() < G.frozenUntil;
-  const x = e.x, y = e.y, cx = x + 14;
+// Gegner gut sichtbar: kräftige Farben, dunkle Umrandung, heller "Sticker"-Rand,
+// Schatten am Boden, etwas größer als ihr Körper und ein leichtes Wippen.
+const E_OUTLINE = '#1a0f1f';
+const E_HALO = 'rgba(255,255,255,0.92)';
+const E_SCALE = 1.3;
+let ePass = 0; // 0 = heller Rand, 1 = Farbe mit dunkler Kontur
+
+// Füllform: im Rand-Durchgang dick in Weiß, sonst Farbe + dunkle Kontur
+function eFill(color, build) {
+  ctx.beginPath();
+  build();
+  if (ePass === 1) ctx.fillStyle = color;
+  ctx.fill();
+  ctx.stroke();
+}
+// Linie (Beine, Streifen): im Rand-Durchgang breiter in Weiß
+function eLine(color, w, build) {
+  ctx.beginPath();
+  build();
   ctx.save();
+  if (ePass === 0) ctx.lineWidth = w + 5;
+  else { ctx.strokeStyle = color; ctx.lineWidth = w; }
+  ctx.stroke();
+  ctx.restore();
+}
+// Auge mit Pupille und bösem Blick
+function eEye(x, y, r, face) {
+  eFill('#ffffff', () => ctx.arc(x, y, r, 0, 7));
+  if (ePass === 1) {
+    ctx.fillStyle = '#111';
+    ctx.beginPath(); ctx.arc(x + face * r * 0.35, y + r * 0.1, r * 0.55, 0, 7); ctx.fill();
+  }
+}
+
+function enemyShape(e, t, frozen) {
+  const f = e.face;
   switch (e.type) {
-    case 'k': {
-      ctx.strokeStyle = '#222'; ctx.lineWidth = 2;
+    case 'k': { // Käfer: knallrot mit schwarzen Punkten
       for (let i = 0; i < 3; i++) {
         const a = frozen ? 0 : Math.sin(t * 14 + i) * 3;
-        ctx.beginPath(); ctx.moveTo(x + 6 + i * 8, y + 20); ctx.lineTo(x + 4 + i * 8 + a, y + 28); ctx.stroke();
+        eLine('#111', 2.5, () => { ctx.moveTo(-8 + i * 8, -8); ctx.lineTo(-10 + i * 8 + a, 0); });
       }
-      ctx.fillStyle = '#b3261e';
-      ctx.beginPath(); ctx.ellipse(cx, y + 16, 14, 11, 0, Math.PI, 0); ctx.fill();
-      ctx.fillRect(x, y + 15, 28, 6);
-      ctx.fillStyle = '#111';
-      ctx.beginPath(); ctx.arc(cx - 5, y + 11, 2.5, 0, 7); ctx.arc(cx + 5, y + 9, 2.5, 0, 7); ctx.fill();
-      ctx.beginPath(); ctx.arc(cx + e.face * 14, y + 18, 5, 0, 7); ctx.fill();
-      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(cx + e.face * 15, y + 17, 1.6, 0, 7); ctx.fill();
+      eFill('#ff2b2b', () => { ctx.ellipse(0, -11, 15, 14, 0, Math.PI, 0); ctx.lineTo(15, -6); ctx.lineTo(-15, -6); ctx.closePath(); });
+      if (ePass === 1) {
+        ctx.fillStyle = '#111';
+        ctx.beginPath(); ctx.arc(-6, -16, 3, 0, 7); ctx.arc(4, -20, 2.6, 0, 7); ctx.arc(7, -11, 2.4, 0, 7); ctx.fill();
+      }
+      eFill('#2a1a2e', () => ctx.arc(f * 14, -10, 6.5, 0, 7));
+      eEye(f * 16, -12, 3, f);
       break;
     }
-    case 'i': {
-      ctx.fillStyle = '#6b4a2a';
-      for (let i = 0; i < 7; i++) {
-        const a = Math.PI + (i / 6) * Math.PI;
-        ctx.beginPath();
-        ctx.moveTo(cx + Math.cos(a - 0.2) * 11, y + 20 + Math.sin(a - 0.2) * 11);
-        ctx.lineTo(cx + Math.cos(a) * 19, y + 20 + Math.sin(a) * 19);
-        ctx.lineTo(cx + Math.cos(a + 0.2) * 11, y + 20 + Math.sin(a + 0.2) * 11);
-        ctx.fill();
+    case 'i': { // Igel: dunkle Stacheln, heller Bauch (nicht draufspringen!)
+      eFill('#3b2210', () => {
+        for (let i = 0; i < 7; i++) {
+          const a = Math.PI + (i / 6) * Math.PI;
+          ctx.moveTo(Math.cos(a - 0.22) * 11, -8 + Math.sin(a - 0.22) * 11);
+          ctx.lineTo(Math.cos(a) * 20, -8 + Math.sin(a) * 20);
+          ctx.lineTo(Math.cos(a + 0.22) * 11, -8 + Math.sin(a + 0.22) * 11);
+        }
+      });
+      eFill('#c4762f', () => ctx.ellipse(0, -8, 14, 9, 0, 0, Math.PI * 2));
+      eFill('#ffd9a8', () => ctx.ellipse(f * 11, -6, 7, 5.5, 0, 0, 7));
+      if (ePass === 1) {
+        ctx.fillStyle = '#111';
+        ctx.beginPath(); ctx.arc(f * 17, -6, 2.2, 0, 7); ctx.fill();
       }
-      ctx.fillStyle = '#8a6440';
-      ctx.beginPath(); ctx.ellipse(cx, y + 20, 13, 9, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#e8c9a0';
-      ctx.beginPath(); ctx.ellipse(cx + e.face * 11, y + 22, 6, 5, 0, 0, 7); ctx.fill();
-      ctx.fillStyle = '#111';
-      ctx.beginPath(); ctx.arc(cx + e.face * 16, y + 22, 1.8, 0, 7); ctx.arc(cx + e.face * 9, y + 19, 1.5, 0, 7); ctx.fill();
+      eEye(f * 8, -10, 2.6, f);
       break;
     }
-    case 'w': {
+    case 'w': { // Wespe: gelb-schwarz mit Flügeln und Stachel
       const flap = frozen ? 0 : Math.sin(t * 40) * 5;
-      ctx.fillStyle = 'rgba(255,255,255,0.75)';
-      ctx.beginPath(); ctx.ellipse(cx - 3, y + 4 - flap * 0.5, 7, 4 + flap * 0.3, -0.4, 0, 7); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(cx + 5, y + 3 - flap * 0.5, 7, 4 + flap * 0.3, 0.4, 0, 7); ctx.fill();
-      ctx.fillStyle = '#ffcc00';
-      ctx.beginPath(); ctx.ellipse(cx, y + 14, 13, 8, 0, 0, 7); ctx.fill();
-      ctx.fillStyle = '#222';
-      ctx.fillRect(cx - 6, y + 7, 3, 14); ctx.fillRect(cx + 1, y + 7, 3, 14);
-      ctx.beginPath(); ctx.moveTo(cx - e.face * 13, y + 13); ctx.lineTo(cx - e.face * 19, y + 15); ctx.lineTo(cx - e.face * 13, y + 17); ctx.fill();
-      ctx.beginPath(); ctx.arc(cx + e.face * 9, y + 12, 2, 0, 7); ctx.fill();
+      eFill('rgba(235,248,255,0.95)', () => ctx.ellipse(-3, -20 - flap * 0.5, 7, 4 + flap * 0.3, -0.4, 0, 7));
+      eFill('rgba(235,248,255,0.95)', () => ctx.ellipse(5, -21 - flap * 0.5, 7, 4 + flap * 0.3, 0.4, 0, 7));
+      eFill('#111', () => { ctx.moveTo(-f * 12, -12); ctx.lineTo(-f * 20, -10); ctx.lineTo(-f * 12, -7); ctx.closePath(); });
+      eFill('#ffd000', () => ctx.ellipse(0, -10, 14, 9, 0, 0, 7));
+      if (ePass === 1) {
+        ctx.fillStyle = '#111';
+        ctx.fillRect(-7, -18, 3.5, 16); ctx.fillRect(0, -18, 3.5, 16);
+      }
+      eEye(f * 8, -12, 3, f);
       break;
     }
-    case 'f': {
-      ctx.fillStyle = '#3cb043';
-      ctx.beginPath(); ctx.ellipse(cx, y + 19, 14, 9, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#9be37a';
-      ctx.beginPath(); ctx.ellipse(cx, y + 22, 9, 5, 0, 0, 7); ctx.fill();
-      ctx.fillStyle = '#3cb043';
-      ctx.beginPath(); ctx.arc(cx - 6, y + 10, 5, 0, 7); ctx.arc(cx + 6, y + 10, 5, 0, 7); ctx.fill();
-      ctx.fillStyle = '#fff';
-      ctx.beginPath(); ctx.arc(cx - 6, y + 9, 3, 0, 7); ctx.arc(cx + 6, y + 9, 3, 0, 7); ctx.fill();
-      ctx.fillStyle = '#111';
-      ctx.beginPath(); ctx.arc(cx - 6 + e.face, y + 9, 1.5, 0, 7); ctx.arc(cx + 6 + e.face, y + 9, 1.5, 0, 7); ctx.fill();
+    case 'f': { // Frosch: leuchtend grün mit hellem Bauch und großen Augen
+      eFill('#3fe03a', () => ctx.ellipse(0, -9, 15, 10, 0, 0, Math.PI * 2));
+      eFill('#e9ffb0', () => ctx.ellipse(0, -6, 9, 5, 0, 0, 7));
+      eFill('#3fe03a', () => { ctx.arc(-7, -18, 5.5, 0, 7); });
+      eFill('#3fe03a', () => { ctx.arc(7, -18, 5.5, 0, 7); });
+      eEye(-7, -19, 3.4, f);
+      eEye(7, -19, 3.4, f);
+      if (ePass === 1) {
+        ctx.fillStyle = '#ff6b8a';
+        ctx.beginPath(); ctx.arc(-10, -9, 2.2, 0, 7); ctx.arc(10, -9, 2.2, 0, 7); ctx.fill();
+      }
       break;
     }
   }
+}
+
+function drawEnemy(e) {
+  const t = now() + e.id;
+  const frozen = now() < G.frozenUntil;
+  const cx = e.x + e.w / 2, by = e.y + e.h;
+  const wave = frozen ? 0 : Math.sin(t * 7);
+  const flying = e.type === 'w';
+  ctx.save();
+  // Schatten am Boden (Wespe: kleiner Schatten unter ihr)
+  ctx.fillStyle = 'rgba(0,0,0,0.38)';
+  ctx.beginPath();
+  ctx.ellipse(cx, by + (flying ? 10 : 1), flying ? 12 : 19, flying ? 3 : 5, 0, 0, 7);
+  ctx.fill();
+  // Wippen: Bodengegner werden leicht gestaucht, die Wespe schwebt auf und ab
+  const sq = flying ? 0 : wave * 0.07;
+  ctx.translate(cx, by + (flying ? wave * 3 : 0));
+  ctx.scale(E_SCALE * (1 + sq), E_SCALE * (1 - sq));
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  // 1. heller Rand rundherum (sichtbar auf dunklem und buntem Hintergrund)
+  ePass = 0;
+  ctx.fillStyle = ctx.strokeStyle = E_HALO;
+  ctx.lineWidth = 6;
+  enemyShape(e, t, frozen);
+  // 2. kräftige Farben mit dunkler Kontur (sichtbar auf hellem Hintergrund)
+  ePass = 1;
+  ctx.strokeStyle = E_OUTLINE;
+  ctx.lineWidth = 2;
+  enemyShape(e, t, frozen);
+  ctx.restore();
   if (frozen) {
     ctx.fillStyle = 'rgba(160,215,255,0.55)';
-    ctx.fillRect(x - 2, y - 2, 32, 32);
+    ctx.fillRect(e.x - 6, e.y - 10, e.w + 12, e.h + 12);
+  }
+}
+
+// Hufeisen (U-Form, Öffnung nach unten). (x, y) = Mitte, r = Radius
+function drawHorseshoe(x, y, r, rot = 0) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(rot);
+  ctx.lineCap = 'butt';
+  ctx.beginPath();
+  ctx.arc(0, 0, r, Math.PI * 0.78, Math.PI * 2.22);
+  ctx.strokeStyle = '#3a2400';
+  ctx.lineWidth = r * 0.75;
+  ctx.stroke();
+  ctx.strokeStyle = '#ffd23f';
+  ctx.lineWidth = r * 0.48;
+  ctx.stroke();
+  ctx.fillStyle = '#7a4a00';
+  for (let i = 0; i < 6; i++) {
+    const a = Math.PI * (0.92 + i * 0.23);
+    ctx.beginPath(); ctx.arc(Math.cos(a) * r, Math.sin(a) * r, r * 0.09, 0, 7); ctx.fill();
   }
   ctx.restore();
 }
 
+// Geworfenes Hufeisen: dreht sich und zieht eine kleine Spur
 function drawShoe(x, y) {
-  ctx.strokeStyle = '#ffd23f';
-  ctx.lineWidth = 3.5;
+  const t = now();
+  ctx.fillStyle = 'rgba(255,210,63,0.45)';
+  ctx.beginPath(); ctx.arc(x + 9, y + 9, 11, 0, 7); ctx.fill();
+  drawHorseshoe(x + 9, y + 9, 8, t * 14);
+}
+
+// Hufeisen zum Einsammeln: schwebt, glitzert
+function drawShoePickup(h, tnow) {
+  const x = h.x + 14, y = h.y + 12 + Math.sin(tnow * 4 + h.i) * 3;
+  ctx.save();
+  ctx.shadowColor = '#fff3a0';
+  ctx.shadowBlur = 14;
+  ctx.fillStyle = 'rgba(255,240,170,0.5)';
+  ctx.beginPath(); ctx.arc(x, y, 15, 0, 7); ctx.fill();
+  ctx.restore();
+  drawHorseshoe(x, y, 10, Math.sin(tnow * 3 + h.i) * 0.25);
+  if (Math.floor(tnow * 3 + h.i) % 3 === 0) {
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(x + 8, y - 12, 3, 3);
+  }
+}
+
+// Lern-Pfeil über dem ersten Hufeisen in Level 1
+function drawShoeArrow(h, tnow) {
+  const x = h.x + 14, y = h.y - 30 - Math.abs(Math.sin(tnow * 5)) * 10;
+  ctx.fillStyle = '#ffe066';
+  ctx.strokeStyle = '#3a2400';
+  ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.arc(x + 7, y + 7, 6, Math.PI * 0.15 + now() * 12, Math.PI * 1.85 + now() * 12);
-  ctx.stroke();
+  ctx.moveTo(x - 9, y - 14); ctx.lineTo(x + 9, y - 14); ctx.lineTo(x + 9, y - 2);
+  ctx.lineTo(x + 16, y - 2); ctx.lineTo(x, y + 12); ctx.lineTo(x - 16, y - 2); ctx.lineTo(x - 9, y - 2);
+  ctx.closePath();
+  ctx.stroke(); ctx.fill();
+  ctx.font = 'bold 15px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  ctx.lineWidth = 4;
+  ctx.strokeText('Hufeisen!', x, y - 22);
+  ctx.fillStyle = '#fff';
+  ctx.fillText('Hufeisen!', x, y - 22);
 }
 
 function drawFlag() {
@@ -1477,6 +1681,11 @@ function render() {
     if (G.gemsTaken.has(g.i) || g.x < cam - 40 || g.x > cam + VW + 40) continue;
     drawDiamond(g.x + 10, g.y + 10 + Math.sin(tnow * 3 + g.i) * 2, 9, '#38e1ff', '#d6fbff');
   }
+  for (const h of G.map.shoes) {
+    if (G.shoesTaken.has(h.i) || h.x < cam - 40 || h.x > cam + VW + 40) continue;
+    drawShoePickup(h, tnow);
+    if (G.level === 1 && h.i === 0 && G.mode === 'play') drawShoeArrow(h, tnow);
+  }
   for (const it of G.items.values()) drawItem(it);
   for (const e of G.enemies) if (e.alive && e.x > cam - 60 && e.x < cam + VW + 60) drawEnemy(e);
 
@@ -1530,10 +1739,23 @@ function panel(x, y, w, h) {
   ctx.fill();
 }
 
+function wrapText(text, maxW) {
+  const lines = [];
+  let line = '';
+  for (const word of text.split(' ')) {
+    const test = line ? line + ' ' + word : word;
+    if (line && ctx.measureText(test).width > maxW) { lines.push(line); line = word; } else line = test;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
 function drawHud() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const W = innerWidth;
-  const small = W < 700;
+  // Kurze Bildschirme (Handy quer): kompaktes HUD, Hinweise oben zwischen den Feldern statt über dem Spielgeschehen
+  const compact = innerHeight < 450;
+  const small = W < 700 || compact;
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'left';
   const info = myInfo() || { lives: 0, gems: 0, score: 0 };
@@ -1550,9 +1772,17 @@ function drawHud() {
   ctx.fillStyle = '#fff';
   let pw = '';
   if (me.power >= 1) pw += ' 🔥';
-  if (me.power >= 2) pw += '🧲';
   if (me.star > 0) pw += ' 🌈' + Math.ceil(me.star);
   ctx.fillText(`❤ ${info.lives}   💎 ${info.gems}   ★ ${info.score}${pw}`, 20, 48);
+
+  // Hufeisen-Zähler (Wurf-Munition)
+  const pop = G.ammoFlash > 0 ? 1 + G.ammoFlash * 0.5 : 1;
+  panel(10, 70, 104, 42);
+  drawHorseshoe(36, 91, 10 * pop);
+  ctx.font = `bold ${Math.round(22 * pop)}px system-ui, sans-serif`;
+  ctx.textAlign = 'left';
+  ctx.fillStyle = me.ammo > 0 ? '#ffe066' : 'rgba(255,255,255,0.55)';
+  ctx.fillText(`× ${me.ammo}`, 54, 92);
 
   // Mitspieler-Liste
   const list = Object.values(G.players).sort((a, b) => a.color - b.color);
@@ -1576,19 +1806,45 @@ function drawHud() {
 
   // Countdown und Hinweise
   ctx.textAlign = 'center';
+  // Platz in der Mitte oben zwischen Level-Feld (links) und Spielerliste (rechts)
+  const midW = compact ? W - 2 * (Math.max(190, lw) + 18) : W - 20;
+  let toastY = compact ? 8 : 120;
   if (G.countdown > 0) {
-    panel(W / 2 - 150, 74, 300, 36);
+    const cy = compact ? toastY : 74, cw = Math.min(300, midW);
+    panel(W / 2 - cw / 2, cy, cw, 36);
     ctx.fillStyle = '#ffe066';
     ctx.font = 'bold 16px system-ui, sans-serif';
-    ctx.fillText(`🏁 Nächstes Level in ${Math.ceil(G.countdown)} …`, W / 2, 92);
+    ctx.fillText(`🏁 Nächstes Level in ${Math.ceil(G.countdown)} …`, W / 2, cy + 18, cw - 12);
+    if (compact) toastY += 44;
+  }
+  if (G.hint) {
+    // Lern-Hinweis: groß, gelb umrandet, mit Zeilenumbruch
+    ctx.globalAlpha = Math.min(1, G.hint.t * 2);
+    ctx.font = `bold ${small ? 15 : 18}px system-ui, sans-serif`;
+    const maxW = Math.min(compact ? midW : W - 40, 520);
+    const lines = wrapText(G.hint.text, maxW - 70);
+    const lh = small ? 20 : 24;
+    const h = lines.length * lh + 18;
+    const w = Math.min(maxW, Math.max(...lines.map(l => ctx.measureText(l).width)) + 74);
+    const hx = W / 2 - w / 2, hy = toastY;
+    panel(hx, hy, w, h);
+    ctx.strokeStyle = '#ffe066'; ctx.lineWidth = 3;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(hx, hy, w, h, 10); else ctx.rect(hx, hy, w, h);
+    ctx.stroke();
+    drawHorseshoe(hx + 28, hy + h / 2, 11);
+    ctx.fillStyle = '#fff';
+    lines.forEach((l, i) => ctx.fillText(l, W / 2 + 22, hy + 9 + lh / 2 + i * lh));
+    ctx.globalAlpha = 1;
+    toastY = hy + h + 8;
   }
   G.toasts.forEach((t, i) => {
     ctx.globalAlpha = Math.min(1, t.t * 2);
     ctx.font = `bold ${small ? 12 : 15}px system-ui, sans-serif`;
-    const w = Math.min(W - 20, ctx.measureText(t.text).width + 24);
-    panel(W / 2 - w / 2, 120 + i * 34, w, 28);
+    const w = Math.min(midW, ctx.measureText(t.text).width + 24);
+    panel(W / 2 - w / 2, toastY + i * 34, w, 28);
     ctx.fillStyle = '#fff';
-    ctx.fillText(t.text, W / 2, 134 + i * 34, W - 30);
+    ctx.fillText(t.text, W / 2, toastY + 14 + i * 34, w - 12);
   });
   ctx.globalAlpha = 1;
   if (me.out) {
@@ -1675,8 +1931,14 @@ async function startHost() {
   }
   $('err').textContent = '';
   becomeHost(code, name);
-  history.replaceState(null, '', `?room=${code}`);
+  history.replaceState(null, '', `?room=${code}` + (startLevel() > 1 ? `&level=${startLevel()}` : ''));
   showLobby();
+}
+
+// Testhilfe: ?level=3 startet ein eigenes Spiel direkt in Level 3 (Standard: Level 1)
+function startLevel() {
+  const n = parseInt(new URLSearchParams(location.search).get('level'), 10);
+  return n >= 1 && n <= 99 ? n : 1;
 }
 
 function becomeHost(code, name) {
@@ -1692,7 +1954,7 @@ function becomeHost(code, name) {
 function startSolo() {
   G.net = { broadcast() {}, sendTo() {}, kick() {}, send() {} };
   becomeHost('SOLO', getName());
-  change({ k: 'start', n: 1 });
+  change({ k: 'start', n: startLevel() });
 }
 
 async function startJoin(code) {
@@ -1732,7 +1994,7 @@ function setupMenu() {
   $('btnHost').onclick = startHost;
   $('btnStart').onclick = () => {
     if (G.mode === 'play') hideOverlay();
-    else if (G.role === 'host') change({ k: 'start', n: 1 });
+    else if (G.role === 'host') change({ k: 'start', n: startLevel() });
   };
   $('btnCopy').onclick = async () => {
     try { await navigator.clipboard.writeText(shareUrl()); $('btnCopy').textContent = 'Kopiert ✓'; }
@@ -1751,7 +2013,7 @@ function setupMenu() {
 // ---------------------------------------------------------------------------
 // Hauptschleife
 // ---------------------------------------------------------------------------
-let last = performance.now(), acc = 0;
+let last = performance.now(), acc = 0, shownAmmo = -1;
 function frame(ts) {
   const dt = Math.min(0.1, (ts - last) / 1000);
   last = ts;
@@ -1777,6 +2039,11 @@ function frame(ts) {
   if (G.map) render();
   else { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#6ec3ff'; ctx.fillRect(0, 0, cv.width, cv.height); }
   $('btnInvite').hidden = !(G.mode === 'play' && G.code && G.code !== 'SOLO');
+  if (shownAmmo !== me.ammo) {
+    shownAmmo = me.ammo;
+    $('ammoBadge').textContent = me.ammo;
+    $('btnFire').classList.toggle('empty', me.ammo <= 0);
+  }
   requestAnimationFrame(frame);
 }
 

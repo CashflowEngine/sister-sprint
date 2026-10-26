@@ -37,12 +37,15 @@
         <ul>
           <li><b>Laufen:</b> Pfeiltasten ◀ ▶ oder A / D</li>
           <li><b>Springen:</b> Pfeil hoch, W oder Leertaste (länger drücken = höher)</li>
-          <li><b>Hufeisen werfen:</b> X</li>
-          <li><b>iPad:</b> Knöpfe unten links und rechts</li>
+          <li><b>Hufeisen werfen:</b> X (oder J, K)</li>
+          <li><b>iPhone / iPad:</b> Knöpfe unten links und rechts, „Wurf“ wirft ein Hufeisen</li>
         </ul>
+        <p class="shoe-help"><b>Hufeisen:</b> Sammle die goldenen Hufeisen ein, die im Level schweben – jedes gibt dir 3 Würfe.
+          Oben links siehst du, wie viele du hast. Mit <b>X</b> oder dem <b>Wurf-Knopf</b> wirfst du ein Hufeisen
+          und besiegst Gegner <b>aus der Ferne</b> – sogar den Igel, auf den man nicht springen darf!</p>
         <p>Spring Gegnern auf den Kopf – aber nicht dem Igel! Stoß Bonusblöcke von unten an,
           sammle Diamanten (100 = Extraleben) und reite zur Fahne.
-          Der erste Zauberstern gibt eine <b>Feuer-Mähne</b> (zerschlägt Ziegel), der zweite den <b>Hufeisen-Wurf</b>.</p>
+          Ein Zauberstern gibt eine <b>Feuer-Mähne</b> (zerschlägt Ziegel) und 5 Hufeisen.</p>
       </details>
     </div>
 
@@ -79,7 +82,7 @@
       <div class="tbtn" data-k="right">▶</div>
     </div>
     <div class="pad pad-right">
-      <div class="tbtn small" data-k="fire">Wurf</div>
+      <div class="tbtn fire empty" data-k="fire" id="btnFire"><span class="fire-ico"></span><span class="fire-lbl">Wurf</span><span class="ammo" id="ammoBadge">0</span></div>
       <div class="tbtn jump" data-k="jump">⤒</div>
     </div>
   </div>

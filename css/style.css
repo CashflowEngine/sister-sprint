@@ -151,8 +151,45 @@ body.touch.playing #overlay:not([hidden]) ~ #touch { display: none; }
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
 }
 .tbtn.jump { width: 92px; height: 92px; font-size: 38px; }
-.tbtn.small { width: 62px; height: 62px; font-size: 15px; }
 .tbtn.on { background: rgba(255, 255, 255, 0.55); }
+/* Wurf-Knopf: groß, goldener Rand, Hufeisen-Zähler als Abzeichen */
+.tbtn.fire {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  flex-direction: column;
+  font-size: 15px;
+  background: rgba(255, 196, 40, 0.42);
+  border-color: #ffe066;
+}
+.tbtn.fire.on { background: rgba(255, 210, 63, 0.8); }
+.tbtn.fire.empty { background: rgba(255, 255, 255, 0.2); border-color: rgba(255, 255, 255, 0.5); }
+.fire-ico {
+  width: 30px;
+  height: 26px;
+  border: 7px solid #ffd23f;
+  border-bottom: none;
+  border-radius: 15px 15px 0 0;
+  box-shadow: 0 0 0 2px #3a2400, inset 0 0 0 2px #3a2400;
+  margin-bottom: 2px;
+}
+.tbtn.fire.empty .fire-ico { border-color: rgba(255, 255, 255, 0.7); }
+.ammo {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 6px;
+  border-radius: 15px;
+  background: #e5484d;
+  border: 2px solid #fff;
+  font-size: 16px;
+  line-height: 26px;
+  text-align: center;
+}
+.tbtn.fire.empty .ammo { background: #5b4a8a; }
+.tbtn * { pointer-events: none; }
 
 .topbtns {
   position: fixed;
