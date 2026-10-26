@@ -9,6 +9,15 @@ Die Spielmechanik ist an klassische 80er-Jump'n'Runs wie *The Great Giana Sister
 2. Den Link (oder QR-Code) aus dem Warteraum an Freunde schicken. Wer ihn öffnet, klickt **„Mitspielen“**.
 3. Der Gastgeber klickt **„Los geht's!“**. Man kann auch später noch dazukommen (Knopf **👥 Einladen**).
 
+## Reittiere
+
+Vor dem Start sucht sich jeder sein eigenes Reittier aus: **Haflinger, Isländer, Friese, Kaltblut,
+Lusitano, Fahrrad, Bobcat-Bagger oder John-Deere-Traktor**. Im Warteraum lässt sich die Auswahl noch ändern.
+Die letzte Wahl wird auf dem Gerät gespeichert und im Mehrspieler-Spiel sehen alle die Auswahl der anderen.
+Alle Reittiere laufen und springen gleich und haben dieselbe Trefferfläche – die Unterschiede sind nur im Aussehen.
+
+## Steuerung
+
 | Aktion | Tastatur | iPad |
 | --- | --- | --- |
 | Laufen | ◀ ▶ oder A / D | Knöpfe unten links |

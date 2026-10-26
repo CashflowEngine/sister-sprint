@@ -1,5 +1,6 @@
 import { TILE, ROWS, SOLID, buildLevel, themeFor, easeFor } from './levels.js';
 import { Net, randomCode, MAX_PLAYERS } from './net.js';
+import { MOUNTS, defaultMount, normalizeMount, mountLabel, drawMount } from './mounts.js';
 
 // ---------------------------------------------------------------------------
 // Grundwerte
@@ -17,11 +18,11 @@ const STAR_SHOES = 5;   // so viele gibt ein Zauberstern zusätzlich
 const MAX_SHOES = 15;
 
 const COLORS = [
-  { name: 'Rot', shirt: '#e5484d', helmet: '#a3191e', horse: '#8b4a2b', mane: '#2b1a10', hair: '#f2c94c' },
-  { name: 'Blau', shirt: '#3b82f6', helmet: '#1d3fb0', horse: '#f4efe6', mane: '#b9a68a', hair: '#6b3a1e' },
-  { name: 'Grün', shirt: '#22c55e', helmet: '#14703a', horse: '#34343c', mane: '#121216', hair: '#d9822b' },
-  { name: 'Lila', shirt: '#a855f7', helmet: '#6d1fb8', horse: '#d9a45a', mane: '#fff3d6', hair: '#2a1a12' },
-  { name: 'Orange', shirt: '#f97316', helmet: '#b13a0a', horse: '#9a9aa3', mane: '#ececf2', hair: '#f5e1a4' },
+  { name: 'Rot', shirt: '#e5484d', helmet: '#a3191e', hair: '#f2c94c' },
+  { name: 'Blau', shirt: '#3b82f6', helmet: '#1d3fb0', hair: '#6b3a1e' },
+  { name: 'Grün', shirt: '#22c55e', helmet: '#14703a', hair: '#d9822b' },
+  { name: 'Lila', shirt: '#a855f7', helmet: '#6d1fb8', hair: '#2a1a12' },
+  { name: 'Orange', shirt: '#f97316', helmet: '#b13a0a', hair: '#f5e1a4' },
 ];
 
 const ITEM_TEXT = {
@@ -36,6 +37,7 @@ const ITEM_TEXT = {
 const now = () => performance.now() / 1000;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const $ = id => document.getElementById(id);
+let selectedMount = defaultMount;
 
 // ---------------------------------------------------------------------------
 // Spielzustand
@@ -757,7 +759,8 @@ function hostUpdate(dt) {
   if (G.sendT <= 0) {
     G.sendT = 0.05;
     const ps = {};
-    for (const p of all) if (p.s) ps[p.id] = p.s;
+    // Der Gastgeber ergänzt die bestätigte Wahl, auch für späte Mitspieler.
+    for (const p of all) if (p.s) ps[p.id] = [...p.s.slice(0, 7), normalizeMount(p.mount)];
     const es = [];
     for (const e of G.enemies) if (e.alive) es.push([e.id, Math.round(e.x), Math.round(e.y), e.face]);
     G.net.broadcast({ t: 's', p: ps, e: es, time: Math.ceil(G.time), cd: Math.ceil(G.countdown), fr: Math.max(0, G.frozenUntil - now()) });
@@ -812,13 +815,13 @@ function nextLevel() {
 function sendInfo() {
   G.infoDirty = false;
   const p = {};
-  for (const q of Object.values(G.players)) p[q.id] = { name: q.name, color: q.color, lives: q.lives, gems: q.gems, score: q.score };
+  for (const q of Object.values(G.players)) p[q.id] = { name: q.name, color: q.color, mount: normalizeMount(q.mount), lives: q.lives, gems: q.gems, score: q.score };
   G.net.broadcast({ t: 'i', p });
   updatePlayerList();
 }
 
-function newPlayer(id, name, color) {
-  return { id, name, color, lives: START_LIVES, gems: 0, score: 0, lifeMarks: 0, s: null, finishedLevel: 0, rx: null, ry: null };
+function newPlayer(id, name, color, mount = defaultMount) {
+  return { id, name, color, mount: normalizeMount(mount), lives: START_LIVES, gems: 0, score: 0, lifeMarks: 0, s: null, finishedLevel: 0, rx: null, ry: null };
 }
 
 function cleanName(n) {
@@ -835,7 +838,7 @@ function hostMessage(id, m) {
     const used = new Set(Object.values(G.players).map(p => p.color));
     let color = 0;
     while (used.has(color)) color++;
-    const p = newPlayer(id, cleanName(m.name), color);
+    const p = newPlayer(id, cleanName(m.name), color, m.mount);
     G.players[id] = p;
     G.net.sendTo(id, {
       t: 'welcome', id, color, mode: G.mode, level: G.level, code: G.code,
@@ -850,7 +853,10 @@ function hostMessage(id, m) {
   }
   const p = G.players[id];
   if (!p) return;
-  if (m.t === 'p') p.s = m.s;
+  if (m.t === 'mount' && G.mode === 'lobby') {
+    p.mount = normalizeMount(m.mount);
+    sendInfo();
+  } else if (m.t === 'p') p.s = m.s;
   else if (m.t === 'ev') hostEvent(id, m.e);
 }
 
@@ -965,12 +971,18 @@ function clientMessage(_, m) {
       break;
     case 'i': {
       for (const id of Object.keys(G.players)) if (!m.p[id]) delete G.players[id];
-      for (const [id, info] of Object.entries(m.p)) G.players[id] = Object.assign(G.players[id] || { id, s: null, rx: null, ry: null }, info);
+      for (const [id, info] of Object.entries(m.p)) G.players[id] = Object.assign(G.players[id] || { id, s: null, rx: null, ry: null }, info, { mount: normalizeMount(info.mount) });
       updatePlayerList();
       break;
     }
     case 's': {
-      for (const [id, s] of Object.entries(m.p)) if (G.players[id] && id !== G.myId) G.players[id].s = s;
+      for (const [id, s] of Object.entries(m.p)) {
+        const p = G.players[id];
+        if (p && id !== G.myId) {
+          p.s = s;
+          p.mount = normalizeMount(s[7] ?? p.mount);
+        }
+      }
       for (const [id, x, y, face] of m.e) {
         const e = G.enemies[id];
         if (e && e.alive) { e.tx = x; e.ty = y; e.face = face; }
@@ -1309,7 +1321,7 @@ function darker(hex, f = 0.7) {
   return `rgb(${r},${g},${b})`;
 }
 
-// Pferd mit Reiterin. (x, y) = linke obere Ecke der Spielfigur.
+// Reittier mit Reiterin. (x, y) = linke obere Ecke der Spielfigur.
 function drawRider(x, y, o) {
   const c = COLORS[o.color % COLORS.length];
   const t = o.anim;
@@ -1323,92 +1335,7 @@ function drawRider(x, y, o) {
     ctx.shadowColor = `hsl(${(t * 400) % 360},100%,60%)`;
     ctx.shadowBlur = 18;
   }
-  const horse = c.horse, dark = darker(horse, 0.62);
-  const flame = o.power >= 1;
-  const moving = Math.abs(o.vx) > 20;
-
-  // Beine
-  const legs = [[12, 0], [8, Math.PI], [-10, 0.6], [-14, Math.PI + 0.6]];
-  ctx.lineCap = 'round';
-  for (const [hx, ph] of legs) {
-    let a = 0;
-    if (!o.onGround) a = hx > 0 ? -0.9 : 0.9;
-    else if (moving) a = Math.sin(t * 16 + ph) * 0.65;
-    ctx.strokeStyle = dark;
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.moveTo(hx, -22);
-    const ex = hx + Math.sin(a) * 20, ey = -22 + Math.cos(a) * 20;
-    ctx.lineTo(ex, ey);
-    ctx.stroke();
-    ctx.fillStyle = '#222';
-    ctx.fillRect(ex - 3, ey - 2, 6, 4);
-  }
-
-  // Schweif
-  ctx.strokeStyle = flame ? '#ff7a1a' : c.mane;
-  ctx.lineWidth = 6;
-  ctx.beginPath();
-  ctx.moveTo(-19, -30);
-  ctx.quadraticCurveTo(-30, -30, -31, -14 + Math.sin(t * 10) * 3);
-  ctx.stroke();
-
-  // Körper, Hals und Kopf
-  ctx.fillStyle = horse;
-  ctx.beginPath(); ctx.ellipse(0, -28, 21, 11, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(10, -33); ctx.lineTo(18, -52); ctx.lineTo(27, -50); ctx.lineTo(21, -26); ctx.closePath(); ctx.fill();
-  ctx.save();
-  ctx.translate(27, -48); ctx.rotate(0.5);
-  ctx.beginPath(); ctx.ellipse(4, 0, 10, 6, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.restore();
-  ctx.beginPath(); ctx.moveTo(19, -54); ctx.lineTo(21, -62); ctx.lineTo(24, -53); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#111';
-  ctx.beginPath(); ctx.arc(25, -51, 1.8, 0, 7); ctx.fill();
-  ctx.beginPath(); ctx.arc(34, -42, 1.2, 0, 7); ctx.fill();
-
-  // Mähne (mit Zauberkraft als Flamme)
-  if (flame) {
-    for (let i = 0; i < 5; i++) {
-      const px = 18 - i * 2.4, py = -54 + i * 5;
-      const fl = 6 + Math.sin(t * 20 + i) * 3;
-      ctx.fillStyle = i % 2 ? '#ffd23f' : '#ff5a1f';
-      ctx.beginPath(); ctx.moveTo(px + 3, py); ctx.lineTo(px - fl, py - 2); ctx.lineTo(px + 1, py + 5); ctx.closePath(); ctx.fill();
-    }
-  } else {
-    ctx.strokeStyle = c.mane; ctx.lineWidth = 5;
-    ctx.beginPath(); ctx.moveTo(18, -55); ctx.lineTo(11, -34); ctx.stroke();
-  }
-
-  // Sattel
-  ctx.fillStyle = '#5a2d0c';
-  ctx.fillRect(-8, -40, 15, 5);
-  ctx.fillStyle = c.shirt;
-  ctx.fillRect(-9, -36, 17, 3);
-
-  // Reiterin
-  ctx.strokeStyle = '#2f3040'; ctx.lineWidth = 5;
-  ctx.beginPath(); ctx.moveTo(-1, -40); ctx.lineTo(4, -28); ctx.stroke();
-  ctx.fillStyle = '#1e1e24'; ctx.fillRect(2, -30, 6, 4);
-  ctx.fillStyle = c.shirt;
-  ctx.beginPath();
-  ctx.moveTo(-7, -40); ctx.lineTo(-5, -58); ctx.lineTo(4, -58); ctx.lineTo(5, -40); ctx.closePath(); ctx.fill();
-  // Arm und Zügel
-  ctx.strokeStyle = c.shirt; ctx.lineWidth = 4;
-  ctx.beginPath(); ctx.moveTo(0, -54); ctx.lineTo(13, -46); ctx.stroke();
-  ctx.fillStyle = '#ffd9b3'; ctx.beginPath(); ctx.arc(14, -46, 2.5, 0, 7); ctx.fill();
-  ctx.strokeStyle = '#3a2a1a'; ctx.lineWidth = 1.2;
-  ctx.beginPath(); ctx.moveTo(14, -46); ctx.lineTo(30, -44); ctx.stroke();
-  // Zopf
-  ctx.strokeStyle = c.hair; ctx.lineWidth = 5;
-  ctx.beginPath(); ctx.moveTo(-5, -64); ctx.quadraticCurveTo(-14, -62, -16, -52 + Math.sin(t * 12) * 2); ctx.stroke();
-  // Kopf und Reithelm
-  ctx.fillStyle = '#ffd9b3';
-  ctx.beginPath(); ctx.arc(0, -64, 7, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = c.helmet;
-  ctx.beginPath(); ctx.arc(0, -66, 7.6, Math.PI, 0); ctx.fill();
-  ctx.fillRect(0, -67, 10, 2.5);
-  ctx.fillStyle = '#222';
-  ctx.beginPath(); ctx.arc(3.5, -63, 1.2, 0, 7); ctx.fill();
+  drawMount(ctx, o.mount, o, c);
   ctx.restore();
 
   if (o.name) {
@@ -1697,7 +1624,7 @@ function render() {
     if (!(f & 1)) continue;
     if ((f & 16) && Math.floor(tnow * 10) % 2) continue;
     drawRider(p.rx, p.ry, {
-      color: p.color, face: p.s[4], anim: p.anim || 0, vx: p.s[2], onGround: Math.abs(p.s[3]) < 5,
+      color: p.color, mount: p.mount, face: p.s[4], anim: p.anim || 0, vx: p.s[2], onGround: Math.abs(p.s[3]) < 5,
       alive: true, power: (f >> 1) & 3, star: !!(f & 8), finished: !!(f & 32), name: p.name,
     });
   }
@@ -1706,7 +1633,7 @@ function render() {
   if (!me.out && G.mode === 'play' && !(me.inv > 0 && me.alive && Math.floor(tnow * 10) % 2)) {
     const info = myInfo();
     drawRider(me.x, me.y, {
-      color: me.color, face: me.face, anim: me.anim, vx: me.vx, onGround: me.onGround, alive: me.alive,
+      color: me.color, mount: info?.mount || selectedMount, face: me.face, anim: me.anim, vx: me.vx, onGround: me.onGround, alive: me.alive,
       power: me.power, star: me.star > 0, finished: me.finished, name: info ? info.name : '',
     });
   }
@@ -1871,6 +1798,8 @@ function shareUrl() {
 let qrDone = null;
 function showLobby() {
   show('lobby');
+  $('lobbyMountPicker').hidden = G.mode !== 'lobby';
+  updateMountPickers();
   $('roomCode').textContent = G.code;
   $('shareLink').value = shareUrl();
   if (qrDone !== G.code && window.QRCode) {
@@ -1896,9 +1825,14 @@ function updatePlayerList() {
     dot.style.background = COLORS[p.color % COLORS.length].shirt;
     li.appendChild(dot);
     li.appendChild(document.createTextNode(p.name + (p.id === 'H' ? ' (Gastgeber)' : '') + (p.id === G.myId ? ' – du' : '')));
+    const mount = document.createElement('small');
+    mount.className = 'player-mount';
+    mount.textContent = mountLabel(p.mount);
+    li.appendChild(mount);
     ul.appendChild(li);
   }
   $('pcount').textContent = `${list.length} / ${MAX_PLAYERS}`;
+  updateMountPickers();
 }
 
 function showMessage(title, text, solo = false) {
@@ -1947,7 +1881,7 @@ function becomeHost(code, name) {
   G.code = code;
   G.mode = 'lobby';
   me.color = 0;
-  G.players = { H: newPlayer('H', name, 0) };
+  G.players = { H: newPlayer('H', name, 0, selectedMount) };
   loadLevel(1);
 }
 
@@ -1970,7 +1904,7 @@ async function startJoin(code) {
   });
   try {
     G.myId = await G.net.joinGame(code);
-    G.net.send({ t: 'hello', name });
+    G.net.send({ t: 'hello', name, mount: selectedMount });
     $('err').textContent = '';
   } catch (e) {
     $('err').textContent = e.message || String(e);
@@ -1978,7 +1912,65 @@ async function startJoin(code) {
   }
 }
 
+function chooseMount(id) {
+  selectedMount = normalizeMount(id);
+  try { localStorage.setItem('ss_mount', selectedMount); } catch (_) { /* egal */ }
+  if (G.mode === 'lobby') {
+    if (G.role === 'host') {
+      myInfo().mount = selectedMount;
+      sendInfo();
+    } else G.net.send({ t: 'mount', mount: selectedMount });
+  }
+  updateMountPickers();
+}
+
+function updateMountPickers() {
+  for (const button of document.querySelectorAll('.mount-option')) {
+    const picked = button.dataset.mount === selectedMount;
+    button.setAttribute('aria-pressed', String(picked));
+    button.classList.toggle('selected', picked);
+    const preview = button.querySelector('canvas');
+    const pc = preview.getContext('2d');
+    pc.clearRect(0, 0, preview.width, preview.height);
+    pc.save();
+    pc.translate(preview.width / 2 - 5, preview.height - 14);
+    pc.scale(1.55, 1.55);
+    drawMount(pc, button.dataset.mount, { anim: 0.3, vx: 0, onGround: true, power: 0 }, COLORS[myInfo()?.color || 0]);
+    pc.restore();
+  }
+}
+
+function setupMountPickers() {
+  try { selectedMount = normalizeMount(localStorage.getItem('ss_mount')); } catch (_) { /* egal */ }
+  for (const id of ['mountPicker', 'lobbyMountPicker']) {
+    const grid = document.createElement('div');
+    grid.className = 'mount-grid';
+    grid.setAttribute('role', 'group');
+    grid.setAttribute('aria-label', 'Reittier wählen');
+    for (const mount of MOUNTS) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'mount-option';
+      button.dataset.mount = mount.id;
+      button.setAttribute('aria-label', mount.label);
+      const preview = document.createElement('canvas');
+      preview.width = 180;
+      preview.height = 142;
+      preview.setAttribute('aria-hidden', 'true');
+      const label = document.createElement('span');
+      label.className = 'mount-label';
+      label.textContent = mount.label;
+      button.append(preview, label);
+      button.onclick = () => chooseMount(mount.id);
+      grid.appendChild(button);
+    }
+    $(id).appendChild(grid);
+  }
+  updateMountPickers();
+}
+
 function setupMenu() {
+  setupMountPickers();
   let saved = '';
   try { saved = localStorage.getItem('ss_name') || ''; } catch (_) { /* egal */ }
   $('name').value = saved || 'Reiterin ' + Math.floor(Math.random() * 90 + 10);

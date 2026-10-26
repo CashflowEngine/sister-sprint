@@ -26,6 +26,9 @@
       <label class="field">Dein Name
         <input id="name" maxlength="12" autocomplete="off">
       </label>
+      <section id="mountPicker" class="mount-picker" aria-labelledby="mountPickerTitle">
+        <h2 id="mountPickerTitle">Reittier wählen</h2>
+      </section>
       <div id="joinBox" hidden>
         <p>Du wurdest in <b>Basti’s Reitstall</b> eingeladen (Spiel <b id="joinCode"></b>).</p>
         <button id="btnJoin" class="big">Mitspielen</button>
@@ -35,6 +38,7 @@
       <details class="help">
         <summary>So wird gespielt</summary>
         <ul>
+          <li><b>Dein Reittier:</b> Wähle vor dem Start dein Pferd oder Fahrzeug aus.</li>
           <li><b>Laufen:</b> Pfeiltasten ◀ ▶ oder A / D</li>
           <li><b>Springen:</b> Pfeil hoch, W oder Leertaste (länger drücken = höher)</li>
           <li><b>Hufeisen werfen:</b> X (oder J, K)</li>
@@ -63,6 +67,9 @@
           <ul id="plist"></ul>
         </div>
       </div>
+      <section id="lobbyMountPicker" class="mount-picker" aria-labelledby="lobbyMountPickerTitle">
+        <h2 id="lobbyMountPickerTitle">Reittier wählen</h2>
+      </section>
       <button id="btnStart" class="big">Los geht's!</button>
       <p id="waitMsg" class="wait" hidden>Warte, bis der Gastgeber das Spiel startet …</p>
       <p class="note">Wichtig: Der Gastgeber muss das Spiel offen lassen. Schließt er das Fenster, endet das Spiel für alle.</p>
